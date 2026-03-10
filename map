@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="utf-8">
+<title>Live Global Vessel Tracker</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+
+body{
+margin:0;
+background:black;
+font-family:Arial;
+}
+
+#map{
+height:100vh;
+width:100%;
+}
+
+.panel{
+position:absolute;
+top:10px;
+left:10px;
+z-index:1000;
+background:rgba(0,0,0,0.75);
+color:white;
+padding:12px;
+border-radius:8px;
+font-size:14px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="panel">
+🌍 Global Live Vessel Tracker<br>
+AIS Satellite + Terrestrial Feed
+</div>
+
+<div id="map"></div>
+
+<script>
+
+const AIS_API_KEY = "PASTE_YOUR_AISSTREAM_KEY_HERE"
+
+const map = L.map('map').setView([20,0],2)
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{ maxZoom:19 }
+).addTo(map)
+
+const vessels = {}
+
+const shipIcon = L.circleMarker
+
+function updateShip(mmsi,lat,lon,speed,course){
+
+if(vessels[mmsi]){
+
+vessels[mmsi].setLatLng([lat,lon])
+
+}
+else{
+
+vessels[mmsi] = shipIcon(
+[lat,lon],
+{
+radius:4,
+color:"#00ffcc",
+fillColor:"#00ffcc",
+fillOpacity:0.9
+}
+).addTo(map)
+
+}
+
+vessels[mmsi].bindPopup(
+
+"MMSI: "+mmsi+"<br>"+
+"Speed: "+speed+" kn<br>"+
+"Course: "+course
+
+)
+
+}
+
+function connectAIS(){
+
+const socket = new WebSocket("wss://stream.aisstream.io/v0/stream")
+
+socket.onopen = () => {
+
+console.log("Connected to AISStream")
+
+socket.send(JSON.stringify({
+APIKey: AIS_API_KEY,
+BoundingBoxes: [[[-90,-180],[90,180]]]
+}))
+
+}
+
+socket.onmessage = (event) => {
+
+const data = JSON.parse(event.data)
+
+if(data.Message && data.Message.PositionReport){
+
+const ship = data.Message.PositionReport
+
+updateShip(
+ship.MMSI,
+ship.Latitude,
+ship.Longitude,
+ship.Sog,
+ship.Cog
+)
+
+}
+
+}
+
+socket.onerror = err => {
+console.log("AIS error",err)
+}
+
+socket.onclose = () => {
+
+console.log("Reconnecting...")
+setTimeout(connectAIS,5000)
+
+}
+
+}
+
+connectAIS()
+
+</script>
+
+</body>
+</html>
